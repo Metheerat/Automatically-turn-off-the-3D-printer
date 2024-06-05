@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Energy Consumption and Device Control Panel</title>
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"></script>
+
+    <!-- jQuery -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+
+    <!-- Highcharts -->
+    <script src="http://code.highcharts.com/highcharts.js"></script>
+    <script src="http://code.highcharts.com/highcharts-more.js"></script>
+    <script src="http://code.highcharts.com/modules/exporting.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f4;
+            font-family: 'Arial', sans-serif;
+        }
+
+        #graph-container, #log-container, #mqttData {
+            width: 100%;
+            max-width: 1500px;
+            margin: 20px;
+            padding: 20px;
+            background-color: #ffffff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+
+        select, button {
+            padding: 10px 15px;
+            border: 2px solid #cccccc;
+            border-radius: 4px;
+            margin: 10px;
+            cursor: pointer;
+            background-color: #e8e8e8;
+        }
+
+        button.active {
+            background-color: #4CAF50; /* Green when active */
+            color: white;
+        }
+
+        .link-button {
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <select id="periodSelect" onchange="updateGraph()">
+        <option value="today" selected>Today</option>
+        <option value="monthly">Monthly</option>
+        <option value="yearly">Yearly</option>
+    </select>
+
+    <div id="graph-container">
+        <div id="energyChart"></div>
+    </div>
+
+    <div id="mqttData">
+        <p id="voltage">Voltage: N/A</p>
+        <p id="current">Current: N/A</p>
+        <p id="power">Power: N/A</p>
+        <p id="totalEnergy">Total Energy: N/A</p>
+        <p id="deviceState">Device State: N/A</p>
+    </div>
+    
+    <h1>Device U01 Control and Energy Monitoring</h1>
+    <div id="energyData"></div>
+    <div id="deviceState"></div>
+    <button onclick="toggleDevice('ON')">Turn ON</button>
+    <button onclick="toggleDevice('OFF')">Turn OFF</button>    
+
+    <div class="link-button">
+        <a href="/historical" class="btn btn-primary">View Historical Data</a>
+    </div>
+
+    <script>
+        var chart;
+        var currentPeriod = 'today';
+
+        function requestData(period) {
+            $.get('/data/' + period, function(data) {
+                var points = data.map(d => [Date.parse(d.timestamp + 'Z'), d.power]);
+                chart.series[0].setData(points, true);
+            });
+        }
+
+        function updateGraph() {
+            const period = document.getElementById('periodSelect').value;
+            currentPeriod = period;
+            requestData(period);
+        }
+
+        function requestLatestData() {
+            if (currentPeriod === 'today') {
+                $.get('/data/latest', function(data) {
+                    var point = [Date.parse(data.timestamp + 'Z'), data.power];
+                    var series = chart.series[0];
+                    var shift = series.data.length > 12;
+
+                    chart.series[0].addPoint(point, true, shift);
+                    updateDataDisplay(data); // Update displayed data
+                });
+            }
+        }
+
+        function updateDataDisplay(data) {
+            document.getElementById('voltage').textContent = `Voltage: ${data.voltage} V`;
+            document.getElementById('current').textContent = `Current: ${data.current} A`;
+            document.getElementById('power').textContent = `Power: ${data.power} W`;
+            document.getElementById('totalEnergy').textContent = `Total Energy: ${data.total} kWh`;
+            document.getElementById('deviceState').textContent = `Device State: ${data.state}`;
+        }
+
+        $(document).ready(function() {
+            chart = new Highcharts.Chart({
+                chart: {
+                    renderTo: 'energyChart',
+                    defaultSeriesType: 'spline',
+                    events: {
+                        load: function() {
+                            setInterval(requestLatestData, 60000); // Update the graph every 60 seconds with the latest data
+                        }
+                    }
+                },
+                title: {
+                    text: 'Energy Consumption'
+                },
+                xAxis: {
+                    type: 'datetime',
+                    tickPixelInterval: 150,
+                    maxZoom: 20 * 1000
+                },
+                yAxis: {
+                    title: {
+                        text: 'Power (W)',
+                        margin: 80
+                    },
+                    min: 0
+                },
+                series: [{
+                    name: 'Power',
+                    data: []
+                }]
+            });
+
+            updateGraph();
+        });
+
+        function toggleDevice(command) {
+            fetch('/toggle_mqtt', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({command: command})
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Success:', data);
+            })
+            .catch(error => {
+                console.error('Error during device toggle:', error);
+            });
+        }
+
+        function fetchData() {
+            fetch('/data/latest')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('No data received:', data.error);
+                    } else {
+                        updateDataDisplay(data); // Update displayed data
+                    }
+                })
+                .catch(err => console.error('Error fetching data:', err));
+        }
+
+        window.onload = function() {
+            setInterval(fetchData, 60000); // Update data every 60 seconds
+            fetchData(); // Fetch data on page load
+        };
+    </script>
+</body>
+</html>

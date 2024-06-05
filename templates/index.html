@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>HCI Lab 3D Printers</title>
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-VkooTj/h7BxMG2YXstAAwiuwMooTmFzAFTW7/6+BmAhOkAjHlxG/zD17gqEsw3J" crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js" integrity="sha384-JCqaU2jw1BWW/s8GFMWioBoYkIBLqwFiBExN9sSwlmxj5vB1HusQbgBlKUPLEnaA" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-E9RHvbYoJFt+jj/foaH1miHbxEG3iUDq3gtnuNeyJg2/0UQ7kaXBU1eg1mjFdopS" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-5qDF2/ME1yokc+5qqmmbK9IjaUd+4I+7VwYliI4EJgeG5Jw4ZQf+l3+0lF7x+c/8" crossorigin="anonymous"></script>
+
+    <!-- jQuery -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+
+    <style>
+        body {
+            background-color: #B9BFFF;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 7.4vh;
+        }
+        .printer {
+            margin: 20px;
+            text-align: center;
+        }
+        .printer img {
+            height: 400px;
+            width: 300px;
+        }
+        .textbox1, .textbox2, .clickbox {
+            width: 300px;
+            height: 35px;
+            line-height: 35px;
+            margin: 10px auto;
+            text-align: center;
+        }
+        .textbox1 {
+            background-color: #fac6f1;
+        }
+        .textbox2 {
+            background-color: #ffffff;
+            font-size: 22px;
+        }
+        .clickbox {
+            background-color: rgb(192, 225, 245);
+            color: rgb(15, 105, 189);
+            cursor: pointer;
+        }
+        #countdown {
+            font-size: 22px;
+            margin-top: 10px;
+            text-align: center;
+        }
+        #printerStatus {
+            font-size: 22px;
+            margin-top: 10px;
+            text-align: center;
+        }
+        .small-text {
+            font-size: 16px; /* Smaller font size */
+            color: red; /* Red color for smaller text */
+        }
+        .logout-btn {
+            background-color: #f44336;
+            color: white;
+            padding: 14px 20px;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+        .logout-btn:hover {
+            background-color: #d32f2f;
+        }
+    </style>
+
+    <script>
+        const initialMinutes = 20; // Initial time in minutes
+        let countdownInterval;
+
+        function toggleDevice(command) {
+            fetch('/toggle_mqtt', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({command: command})
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Success:', data);
+            })
+            .catch(error => {
+                console.error('Error during device toggle:', error);
+            });
+        }
+
+        function startCountdown(minutes) {
+            clearInterval(countdownInterval); // Clear any existing intervals
+            const endTime = new Date().getTime() + minutes * 60 * 1000;
+            localStorage.setItem('countdownEndTime', endTime); // Store the end time in local storage
+            updateCountdown();
+        }
+
+        function updateCountdown() {
+            const countdownElement = document.getElementById('countdown');
+            const endTime = localStorage.getItem('countdownEndTime');
+            
+            if (endTime) {
+                countdownInterval = setInterval(() => {
+                    const now = new Date().getTime();
+                    const distance = endTime - now;
+
+                    if (distance < 0) {
+                        clearInterval(countdownInterval);
+                        countdownElement.innerHTML = "Device U01 is now off";
+                        localStorage.removeItem('countdownEndTime');
+                        toggleDevice('off'); // Automatically send the "off" command
+                        fetchPrinterStatus(); // Refresh the status based on power
+
+                    } else {
+                        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+                        countdownElement.innerHTML = `Time until shutdown: ${hours}h ${minutes}m ${seconds}s`;
+                    }
+                }, 1000);
+            }
+        }
+
+        function powerOnU01() {
+            toggleDevice('on');
+            startCountdown(initialMinutes); // Start a 20-minute countdown
+        }
+
+        function fetchPrinterStatus() {
+            fetch('/printer_status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Error:', data.error);
+                    } else {
+                        if (data.power > 50) {
+                            clearInterval(countdownInterval); // Clear any existing countdown intervals
+                            localStorage.removeItem('countdownEndTime'); // Remove any stored countdown end time
+                            document.getElementById('countdown').innerHTML = ''; // Clear countdown display
+                            document.getElementById('printerStatus').innerHTML = `Printer 3D Status: Working`; // Set status to "กำลังทำงาน"
+                        } else if (data.power < 5) {
+                            clearInterval(countdownInterval); // Clear any existing countdown intervals
+                            localStorage.removeItem('countdownEndTime'); // Remove any stored countdown end time
+                            document.getElementById('countdown').innerHTML = ''; // Clear countdown display
+                            document.getElementById('printerStatus').innerHTML = `Printer 3D Status: IDLE`; // Set status to "ว่าง"
+                        } else if (data.power < 45) {
+                            if (!localStorage.getItem('countdownEndTime')) {
+                                startCountdown(initialMinutes); // Start countdown if not already started
+                            }
+                            document.getElementById('printerStatus').innerHTML = `
+                                Printer 3D Status: Countdown <br>
+                                The 3D printer is ready to use! <br>
+                                <span class="small-text">
+                                    Please print the file within 20 minutes. <br>
+                                    If there is no order within the specified time, <br>
+                                    the system will automatically shut down.
+                                </span>
+                            `; // Set status to "นับถอยหลัง"
+                        }
+                    }
+                })
+                .catch(error => console.error('Error fetching printer status:', error));
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateCountdown(); // Start updating the countdown when the page loads
+            fetchPrinterStatus(); // Update printer status when the page loads
+            setInterval(fetchPrinterStatus, 10000); // Refresh printer status every 10 seconds
+        });
+    </script>
+</head>
+<body>
+    <h1 class="h1">HCI Lab 3D Printers</h1>
+    <h3 class="h3">FRA503: Technopeuneurship in IoT Industry Prototype</h3>
+
+    <div class="container">
+        <div class="printer">
+            <a href="/monitoring">
+                <img src="{{ url_for('static', filename='image/Prusa_i3_MK3.png') }}" alt="Prusa_i3_MK3 Image">
+            </a>
+            <p class="textbox1">Code: U01</p>
+            <p class="textbox2">Model: Prusa i3 MK3</p>
+            <p class="clickbox" onclick="powerOnU01()">Power ON U01!</p>
+            <p id="countdown"></p> <!-- Countdown timer display -->
+            <p id="printerStatus"></p> <!-- Printer status display -->
+        </div>
+        <div class="printer">
+            <a href="page2.html">
+                <img src="{{ url_for('static', filename='image/Ultimaker3Extended.png') }}" alt="Ultimaker3 Extended Image">
+            </a>
+            <p class="textbox1">Code: U02</p>
+            <p class="textbox2">Model: Ultimaker3 Extended</p>
+            <p class="clickbox" onclick="">Power ON!</p>
+        </div>
+        <div class="printer">
+            <a href="page3.html">
+                <img src="{{ url_for('static', filename='image/Ultimaker2extendedplus.png') }}" alt="Ultimaker2extendedplus Image">
+            </a>
+            <p class="textbox1">Code: U03</p>
+            <p class="textbox2">Model: Ultimaker2 Extended +</p>
+            <p class="clickbox" onclick="">Power ON!</p>
+        </div>
+    </div>
+
+    <!-- Logout button -->
+    <form action="http://localhost/IOT/Verification/PHP/logout.php" method="post" style="text-align: center;">
+        <button class="logout-btn" type="submit">Logout</button>
+    </form>
+</body>
+</html>

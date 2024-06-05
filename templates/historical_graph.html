@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Historical Energy Consumption</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
+    <script src="http://code.highcharts.com/highcharts.js"></script>
+    <script src="http://code.highcharts.com/highcharts-more.js"></script>
+    <script src="http://code.highcharts.com/modules/exporting.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f4;
+            font-family: 'Arial', sans-serif;
+        }
+        #graph-container {
+            width: 100%;
+            max-width: 1500px;
+            margin: 20px;
+            padding: 20px;
+            background-color: #ffffff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+        select, button {
+            padding: 10px 15px;
+            border: 2px solid #cccccc;
+            border-radius: 4px;
+            margin: 10px;
+            cursor: pointer;
+            background-color: #e8e8e8;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <label for="daterange">Select Date Range:</label>
+        <input type="text" id="daterange" class="form-control" style="width: 300px; display: inline-block;">
+        <button onclick="updateGraph()">Update</button>
+    </div>
+    <div id="graph-container">
+        <div id="energyChart"></div>
+    </div>
+    <script>
+        $(function() {
+            $('#daterange').daterangepicker({
+                timePicker: true,
+                timePicker24Hour: true,
+                startDate: moment().startOf('day'),
+                endDate: moment().endOf('day'),
+                locale: {
+                    format: 'YYYY-MM-DD HH:mm:ss'
+                }
+            });
+        });
+        
+        var chart;
+        function requestData(startDate, endDate) {
+            $.get('/data/range', { start: startDate, end: endDate }, function(data) {
+                var points = data.details.map(d => [Date.parse(d.timestamp + 'Z'), d.power]);
+                chart.series[0].setData(points, true);
+                $('#totalEnergy').text(`Total Energy: ${data.total_energy_kwh.toFixed(3)} kWh`);
+            });
+        }
+
+        $(document).ready(function() {
+            chart = new Highcharts.Chart({
+                chart: {
+                    renderTo: 'energyChart',
+                    defaultSeriesType: 'spline'
+                },
+                title: {
+                    text: 'Historical Energy Consumption'
+                },
+                xAxis: {
+                    type: 'datetime',
+                    tickPixelInterval: 150,
+                    maxZoom: 20 * 1000
+                },
+                yAxis: {
+                    minPadding: 0.2,
+                    maxPadding: 0.2,
+                    title: {
+                        text: 'Power (W)',
+                        margin: 80
+                    }
+                },
+                series: [{
+                    name: 'Power',
+                    data: []
+                }]
+            });
+
+            $('#graph-container').append('<div id="totalEnergy" style="margin-top: 20px; font-size: 1.2em; font-weight: bold;"></div>');
+        });
+
+
+
+
+        function updateGraph() {
+            var daterange = $('#daterange').data('daterangepicker');
+            var startDate = daterange.startDate.format('YYYY-MM-DD HH:mm:ss');
+            var endDate = daterange.endDate.format('YYYY-MM-DD HH:mm:ss');
+            if (startDate && endDate) {
+                requestData(startDate, endDate);
+            }
+        }
+        $(document).ready(function() {
+            chart = new Highcharts.Chart({
+                chart: {
+                    renderTo: 'energyChart',
+                    defaultSeriesType: 'spline'
+                },
+                title: {
+                    text: 'Historical Energy Consumption'
+                },
+                xAxis: {
+                    type: 'datetime',
+                    tickPixelInterval: 150,
+                    maxZoom: 20 * 1000
+                },
+                yAxis: {
+                    minPadding: 0.2,
+                    maxPadding: 0.2,
+                    title: {
+                        text: 'Power (W)',
+                        margin: 80
+                    }
+                },
+                series: [{
+                    name: 'Power',
+                    data: []
+                }]
+            });
+        });
+    </script>
+</body>
+</html>
