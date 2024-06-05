@@ -1,0 +1,8 @@
+Flask==2.0.1
+//Creating and managing web servers and managing various routes in applications.
+
+paho-mqtt==1.6.1
+//Subscription and authentication from/to MQTT broker
+
+mysql-connector-python==8.0.25 
+//It is a library that makes it easier to connect and work with MySQL databases from Python.
